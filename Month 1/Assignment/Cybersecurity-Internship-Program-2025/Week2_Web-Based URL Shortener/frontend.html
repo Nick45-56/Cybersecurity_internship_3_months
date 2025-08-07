@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URL Shortener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex items-center justify-center min-h-screen">
+    <div class="w-full max-w-md mx-auto p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8">
+            <h1 class="text-3xl font-bold text-center mb-2 text-blue-600 dark:text-blue-400">URL Shortener</h1>
+            <p class="text-center text-gray-500 dark:text-gray-400 mb-8">Create a short link for your long URLs</p>
+            
+            <!-- URL Input Form -->
+            <form id="shortenForm" class="space-y-6">
+                <div>
+                    <label for="longUrl" class="sr-only">Long URL</label>
+                    <input type="url" id="longUrl" name="longUrl" placeholder="Enter a long URL to shorten..." class="w-full px-4 py-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-2 border-transparent focus:border-blue-500 focus:ring-0 transition duration-200" required>
+                </div>
+                <button type="submit" id="submitButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center">
+                    <span id="buttonText">Shorten URL</span>
+                    <svg id="loadingSpinner" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                </button>
+            </form>
+
+            <!-- Result Display Area -->
+            <div id="result" class="mt-8 text-center hidden">
+                <p class="text-gray-600 dark:text-gray-300 mb-2">Your shortened URL:</p>
+                <div class="flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
+                    <a id="shortUrl" href="" target="_blank" class="text-blue-500 font-mono break-all hover:underline"></a>
+                    <button id="copyButton" class="ml-4 p-2 bg-gray-200 dark:bg-gray-600 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition">
+                        <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                </div>
+                <p id="copyFeedback" class="text-green-500 text-sm mt-2 h-4"></p>
+            </div>
+
+            <!-- Error Message Display -->
+            <div id="error" class="mt-4 text-center text-red-500 font-medium hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Element Selection ---
+        const form = document.getElementById('shortenForm');
+        const longUrlInput = document.getElementById('longUrl');
+        const resultDiv = document.getElementById('result');
+        const errorDiv = document.getElementById('error');
+        const shortUrlLink = document.getElementById('shortUrl');
+        const copyButton = document.getElementById('copyButton');
+        const copyFeedback = document.getElementById('copyFeedback');
+        const submitButton = document.getElementById('submitButton');
+        const buttonText = document.getElementById('buttonText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+
+        // --- Backend API Endpoint ---
+        // IMPORTANT: Replace this with your actual backend URL when you deploy.
+        // For local testing, if your backend runs on port 3000, this is correct.
+        const BACKEND_URL = 'http://localhost:3000'; 
+
+        // --- Event Listeners ---
+        form.addEventListener('submit', handleFormSubmit);
+        copyButton.addEventListener('click', copyToClipboard);
+
+        /**
+         * Handles the form submission event.
+         * It prevents the default form action, sends a request to the backend,
+         * and displays the result or an error message.
+         * @param {Event} e - The form submission event.
+         */
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const longUrl = longUrlInput.value;
+
+            // Show loading state
+            toggleLoading(true);
+            hideMessages();
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/shorten`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ longUrl }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Something went wrong');
+                }
+
+                const data = await response.json();
+                displayShortUrl(data.shortUrl);
+
+            } catch (err) {
+                displayError(err.message);
+            } finally {
+                // Hide loading state
+                toggleLoading(false);
+            }
+        }
+
+        /**
+         * Copies the shortened URL to the user's clipboard.
+         */
+        function copyToClipboard() {
+            const urlToCopy = shortUrlLink.href;
+            
+            // A temporary textarea is created to hold the text to be copied.
+            const textArea = document.createElement('textarea');
+            textArea.value = urlToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            
+            try {
+                // Use the document.execCommand for broader browser compatibility
+                document.execCommand('copy');
+                copyFeedback.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyFeedback.textContent = '';
+                }, 2000);
+            } catch (err) {
+                copyFeedback.textContent = 'Failed to copy!';
+                console.error('Failed to copy URL: ', err);
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        // --- UI Helper Functions ---
+
+        /**
+         * Displays the shortened URL in the result section.
+         * @param {string} shortUrl - The shortened URL to display.
+         */
+        function displayShortUrl(shortUrl) {
+            resultDiv.classList.remove('hidden');
+            shortUrlLink.href = shortUrl;
+            shortUrlLink.textContent = shortUrl;
+        }
+
+        /**
+         * Displays an error message.
+         * @param {string} message - The error message to display.
+         */
+        function displayError(message) {
+            errorDiv.classList.remove('hidden');
+            errorDiv.textContent = message;
+        }
+
+        /**
+         * Hides the result and error message sections.
+         */
+        function hideMessages() {
+            resultDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+        }
+
+        /**
+         * Toggles the loading indicator on the submit button.
+         * @param {boolean} isLoading - Whether to show or hide the loading spinner.
+         */
+        function toggleLoading(isLoading) {
+            if (isLoading) {
+                submitButton.disabled = true;
+                buttonText.classList.add('hidden');
+                loadingSpinner.classList.remove('hidden');
+            } else {
+                submitButton.disabled = false;
+                buttonText.classList.remove('hidden');
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
